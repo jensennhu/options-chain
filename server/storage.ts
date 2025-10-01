@@ -38,6 +38,10 @@ export class MemStorage implements IStorage {
   }
 
   async saveMetricsSnapshot(symbol: string, metrics: any): Promise<MetricsSnapshot> {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized');
+    }
+
     const snapshot: MetricsSnapshot = {
       symbol,
       total_options: metrics.totalOptions,
@@ -62,6 +66,10 @@ export class MemStorage implements IStorage {
   }
 
   async getMetricsHistory(symbol: string, limit: number = 50): Promise<MetricsSnapshot[]> {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized');
+    }
+
     const { data, error } = await supabase
       .from('options_metrics_snapshots')
       .select('*')
