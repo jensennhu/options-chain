@@ -1,5 +1,8 @@
-import { TrendingUp, TrendingDown, Activity, Target } from "lucide-react";
+import { TrendingUp, TrendingDown, Activity, Target, History } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { useState, useEffect } from "react";
 
 interface MetricsData {
   totalOptions: number;
@@ -16,7 +19,57 @@ interface OptionsMetricsProps {
 }
 
 export default function OptionsMetrics({ symbol, metrics }: OptionsMetricsProps) {
+  const { toast } = useToast();
+  const [isSaving, setIsSaving] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [history, setHistory] = useState<any[]>([]);
+
   const formatPercent = (value: number) => `${(value * 100).toFixed(1)}%`;
+
+  useEffect(() => {
+    saveSnapshot();
+  }, [symbol, metrics]);
+
+  const saveSnapshot = async () => {
+    try {
+      const response = await fetch('/api/metrics/snapshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol, metrics }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save snapshot');
+      }
+    } catch (error) {
+      console.error('Error saving snapshot:', error);
+    }
+  };
+
+  const loadHistory = async () => {
+    setIsSaving(true);
+    try {
+      const response = await fetch(`/api/metrics/history/${symbol}?limit=20`);
+      if (!response.ok) {
+        throw new Error('Failed to load history');
+      }
+      const data = await response.json();
+      setHistory(data);
+      setShowHistory(true);
+      toast({
+        title: "History Loaded",
+        description: `Loaded ${data.length} historical snapshots`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to load metrics history",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const metricCards = [
     {
@@ -67,8 +120,19 @@ export default function OptionsMetrics({ symbol, metrics }: OptionsMetricsProps)
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold">Market Metrics for {symbol}</h3>
-        <div className="text-sm text-muted-foreground">
-          Last updated: {new Date().toLocaleTimeString()}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={loadHistory}
+            disabled={isSaving}
+          >
+            <History className="h-4 w-4 mr-2" />
+            {showHistory ? 'Refresh History' : 'View History'}
+          </Button>
+          <div className="text-sm text-muted-foreground">
+            Last updated: {new Date().toLocaleTimeString()}
+          </div>
         </div>
       </div>
       
@@ -103,6 +167,33 @@ export default function OptionsMetrics({ symbol, metrics }: OptionsMetricsProps)
           );
         })}
       </div>
+
+      {showHistory && history.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Historical Snapshots</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {history.map((snapshot, idx) => (
+                <div
+                  key={snapshot.id}
+                  className="flex items-center justify-between p-3 rounded-md bg-muted/30 text-sm"
+                >
+                  <div className="flex items-center gap-4">
+                    <span className="text-muted-foreground">
+                      {new Date(snapshot.created_at).toLocaleString()}
+                    </span>
+                    <span>Discounted: {snapshot.discounted_options}</span>
+                    <span>Avg Discount: {formatPercent(snapshot.avg_discount)}</span>
+                    <span>Max: {formatPercent(snapshot.max_discount)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

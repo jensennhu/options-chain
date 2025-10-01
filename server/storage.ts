@@ -1,5 +1,6 @@
 import { type User, type InsertUser } from "@shared/schema";
 import { randomUUID } from "crypto";
+import { supabase, type MetricsSnapshot } from "./supabase";
 
 // modify the interface with any CRUD methods
 // you might need
@@ -8,6 +9,8 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  saveMetricsSnapshot(symbol: string, metrics: any): Promise<MetricsSnapshot>;
+  getMetricsHistory(symbol: string, limit: number): Promise<MetricsSnapshot[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -32,6 +35,45 @@ export class MemStorage implements IStorage {
     const user: User = { ...insertUser, id };
     this.users.set(id, user);
     return user;
+  }
+
+  async saveMetricsSnapshot(symbol: string, metrics: any): Promise<MetricsSnapshot> {
+    const snapshot: MetricsSnapshot = {
+      symbol,
+      total_options: metrics.totalOptions,
+      discounted_options: metrics.discountedOptions,
+      avg_discount: metrics.avgDiscount,
+      max_discount: metrics.maxDiscount,
+      high_volume_options: metrics.highVolumeOptions,
+      avg_implied_volatility: metrics.avgImpliedVolatility,
+    };
+
+    const { data, error } = await supabase
+      .from('options_metrics_snapshots')
+      .insert(snapshot)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to save metrics snapshot: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  async getMetricsHistory(symbol: string, limit: number = 50): Promise<MetricsSnapshot[]> {
+    const { data, error } = await supabase
+      .from('options_metrics_snapshots')
+      .select('*')
+      .eq('symbol', symbol)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      throw new Error(`Failed to fetch metrics history: ${error.message}`);
+    }
+
+    return data || [];
   }
 }
 
